@@ -5,7 +5,7 @@ import Elm
 import Elm.Annotation as Type
 import Elm.ToString
 import Expect
-import KeyValueStore.Internal
+import KeyValueStoreGen.Internal
 import Test exposing (describe, test)
 
 
@@ -21,7 +21,7 @@ declaredTypeAliasTest :
     , valueBody : String
     , valueSignature : String
     }
-    -> KeyValueStore.Internal.DeclaredTypeAlias
+    -> KeyValueStoreGen.Internal.DeclaredTypeAlias
     -> List Test.Test
 declaredTypeAliasTest params passedDeclaredTypeAlias =
     let
@@ -131,7 +131,7 @@ import"""
                     , valueBody = "KnownKeys"
                     , valueSignature = "knownKeys"
                     }
-                    (KeyValueStore.Internal.storeAlias (Dict.fromList []))
+                    (KeyValueStoreGen.Internal.storeAlias (Dict.fromList []))
                 )
             , describe "There was a single key passed when constructing the storeAlias"
                 (declaredTypeAliasTest
@@ -153,7 +153,7 @@ import"""
                     , valueBody = "KnownKeys"
                     , valueSignature = "knownKeys"
                     }
-                    (KeyValueStore.Internal.storeAlias
+                    (KeyValueStoreGen.Internal.storeAlias
                         (Dict.fromList
                             [ ( "name", Type.string ) ]
                         )
@@ -166,7 +166,7 @@ import"""
 storeTests : Test.Test
 storeTests =
     let
-        exampleStoreTypeAlias : KeyValueStore.Internal.DeclaredTypeAlias
+        exampleStoreTypeAlias : KeyValueStoreGen.Internal.DeclaredTypeAlias
         exampleStoreTypeAlias =
             { annotation = Type.string
             , construct = \_ -> Elm.string "t"
@@ -177,7 +177,7 @@ storeTests =
     describe "Test for the `storeTest` function"
         [ test "Produces the right "
             (\_ ->
-                KeyValueStore.Internal.storeType exampleStoreTypeAlias
+                KeyValueStoreGen.Internal.storeType exampleStoreTypeAlias
                     |> .customType
                     |> .annotation
                     |> Type.toString

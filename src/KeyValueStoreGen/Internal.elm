@@ -1,4 +1,4 @@
-module KeyValueStore.Internal exposing
+module KeyValueStoreGen.Internal exposing
     ( DeclaredFn, DeclaredFn1, DeclaredFn2, DeclaredFn3
     , DeclaredFnGroup, DeclaredFn1Group, DeclaredFn2Group
     , DeclaredCustomType, DeclaredTypeAlias

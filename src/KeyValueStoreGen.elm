@@ -1,4 +1,4 @@
-module KeyValueStore exposing
+module KeyValueStoreGen exposing
     ( init
     , generate
     )
@@ -26,7 +26,7 @@ import Elm.Annotation as Type
 import Json.Decode
 import JsonToElm
 import JsonToElm.Gen
-import KeyValueStore.Internal as Internal
+import KeyValueStoreGen.Internal as Internal
 
 
 type alias Store =
