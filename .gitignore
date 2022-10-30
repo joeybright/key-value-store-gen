@@ -1,0 +1,12 @@
+# elm-package generated files
+elm-stuff
+# elm-repl generated files
+repl-temp-*
+# node
+node_modules
+# elm-coverage
+.coverage
+# other
+.DS_Store
+dist
+*.code-workspace
