@@ -87,6 +87,12 @@ type Error
     = StoreNotFound
 
 
+{-| A name for this store, generated from its module name. -}
+storeName : String
+storeName =
+    "localstorage"
+
+
 {-| The decoded value from the count key.
                 
 This can be helpful as a fallback for when the `Value` for this key cannot be found or cannot be decoded!
