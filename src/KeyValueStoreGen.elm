@@ -153,6 +153,10 @@ generate { fileName } json =
         defaults =
             Internal.defaultDeclarations generated.defaults
 
+        storeName : Internal.DeclaredFn
+        storeName =
+            Internal.storeNameDeclaration fileName
+
         helpers : List Elm.Declaration
         helpers =
             List.map Tuple.second (Dict.toList generated.helpers)
@@ -198,7 +202,7 @@ check out the examples folder at this packages Github repo: joeybright/key-value
         , aliases = []
         }
         (typeDeclarations
-            ++ defaults.declarations
+            ++ (storeName.declaration :: defaults.declarations)
             ++ keys.fnGroup.declarations
             ++ decoders.declarations
             ++ encoders.declarations

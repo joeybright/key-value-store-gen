@@ -16,6 +16,7 @@ module KeyValueStoreGen.Internal exposing
     , encoderDeclaration, encoderDeclarations
     , decoderDeclaration, decoderDeclarations
     , defaultDeclaration, defaultDeclarations
+    , storeNameDeclaration
     , setDeclaration, setKeyDeclaration, setKeyDeclarations
     , removeDeclaration, removeDeclarations
     , getDeclaration, getDeclarations
@@ -76,6 +77,8 @@ Functions for generating custom types and type aliases.
 @docs decoderDeclaration, decoderDeclarations
 
 @docs defaultDeclaration, defaultDeclarations
+
+@docs storeNameDeclaration
 
 @docs setDeclaration, setKeyDeclaration, setKeyDeclarations
 
@@ -1385,6 +1388,27 @@ defaultDeclarations defaults =
     { call =
         \key -> Maybe.withDefault (Elm.val key) (Maybe.map .call (Dict.get key defaults))
     , declarations = List.map (Tuple.second >> .declaration) (Dict.toList defaults)
+    }
+
+
+{-| Generates a name for this store based on the passed file name.
+-}
+storeNameDeclaration : List String -> DeclaredFn
+storeNameDeclaration fileName =
+    let
+        declarationName =
+            "storeName"
+
+        storeName =
+            List.foldr (\part acc -> String.toLower part ++ acc) "" fileName
+    in
+    { call = Elm.val declarationName
+    , declaration =
+        Elm.withDocumentation
+            """A name for this store, generated from its module name."""
+            (Elm.declaration declarationName
+                (Elm.string storeName)
+            )
     }
 
 
