@@ -1015,8 +1015,8 @@ need to be used elsewhere!"""
 
 
 {-| -}
-encodeToJsAction : DeclaredFn1
-encodeToJsAction =
+encodeToJsAction : DeclaredFn -> DeclaredFn1
+encodeToJsAction storeName =
     let
         functionBody caseArg taggedExpression =
             Elm.Case.custom caseArg
@@ -1074,7 +1074,8 @@ need to be used elsewhere!"""
                                     ( "list", Nothing )
                                     (\tag action list ->
                                         Gen.Json.Encode.object
-                                            [ Elm.tuple (Elm.string "tag") (Gen.Json.Encode.call_.string tag)
+                                            [ Elm.tuple (Elm.string "name") (Gen.Json.Encode.call_.string storeName.call)
+                                            , Elm.tuple (Elm.string "tag") (Gen.Json.Encode.call_.string tag)
                                             , Elm.tuple (Elm.string "action") (Gen.Json.Encode.call_.string action)
                                             , Elm.tuple (Elm.string "data") (Gen.Json.Encode.call_.object list)
                                             ]
@@ -1413,8 +1414,8 @@ storeNameDeclaration fileName =
 
 
 {-| -}
-setDeclaration : KeyDeclarations -> StoreType -> DeclaredFnGroup -> DeclaredFn2Group -> DeclaredFn3
-setDeclaration passedKeyDeclarations storage decode setters =
+setDeclaration : DeclaredFn -> KeyDeclarations -> StoreType -> DeclaredFnGroup -> DeclaredFn2Group -> DeclaredFn3
+setDeclaration storeName passedKeyDeclarations storage decode setters =
     let
         name =
             "set"
@@ -1455,7 +1456,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                     (storage.constructor storageVal
                                                         (Gen.Dict.insert key keyValue dictVal)
                                                     )
-                                                    (encodeToJsAction.call
+                                                    ((encodeToJsAction storeName).call
                                                         (toJsActionTypeSetVariant.constructor key keyValue)
                                                     )
                                             )
@@ -1493,7 +1494,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                                             (storage.constructor storageVal
                                                                                 (Gen.Dict.insert key keyValue dictVal)
                                                                             )
-                                                                            (encodeToJsAction.call
+                                                                            ((encodeToJsAction storeName).call
                                                                                 (toJsActionTypeSetVariant.constructor key keyValue)
                                                                             )
                                                                     }
@@ -1510,8 +1511,8 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
 
 
 {-| -}
-setKeyDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
-setKeyDeclaration key decodedValue passedKeyDeclaration generatedEncoder storage =
+setKeyDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
+setKeyDeclaration key decodedValue storeName passedKeyDeclaration generatedEncoder storage =
     let
         name =
             "set" ++ capitalizeFirstCharacter key
@@ -1549,7 +1550,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                 )
                                                 dictVal
                                             )
-                                            (encodeToJsAction.call
+                                            ((encodeToJsAction storeName).call
                                                 (toJsActionTypeSetVariant.constructor
                                                     passedKeyDeclaration.call
                                                     (generatedEncoder.call val)
@@ -1579,8 +1580,8 @@ setKeyDeclarations setters =
 
 
 {-| -}
-removeDeclaration : String -> DeclaredFn -> StoreType -> DeclaredFn1
-removeDeclaration key passedKeyDeclaration storage =
+removeDeclaration : String -> DeclaredFn -> DeclaredFn -> StoreType -> DeclaredFn1
+removeDeclaration key storeName passedKeyDeclaration storage =
     let
         name =
             "remove" ++ capitalizeFirstCharacter key
@@ -1621,7 +1622,7 @@ key from the external store.
                                                 )
                                                 dictVal
                                             )
-                                            (encodeToJsAction.call
+                                            ((encodeToJsAction storeName).call
                                                 (toJsActionTypeRemoveVariant.constructor
                                                     passedKeyDeclaration.call
                                                 )
@@ -1636,8 +1637,8 @@ key from the external store.
 
 
 {-| -}
-removeDeclarations : Dict String DeclaredFn1 -> KeyDeclarations -> StoreType -> DeclaredFn1Group
-removeDeclarations removers passedKeyDeclaration storage =
+removeDeclarations : DeclaredFn -> Dict String DeclaredFn1 -> KeyDeclarations -> StoreType -> DeclaredFn1Group
+removeDeclarations storeName removers passedKeyDeclaration storage =
     let
         call key arg =
             Maybe.withDefault (Elm.val key)
@@ -1677,7 +1678,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                                 storageVal
                                                                 (Gen.Dict.remove key dictVal)
                                                             )
-                                                            (encodeToJsAction.call
+                                                            ((encodeToJsAction storeName).call
                                                                 (toJsActionTypeRemoveVariant.constructor key)
                                                             )
                                                 in
@@ -1826,8 +1827,8 @@ function for those known keys!
 
 
 {-| -}
-refreshDeclaration : String -> DeclaredFn -> DeclaredFn
-refreshDeclaration key passedKeyDeclaration =
+refreshDeclaration : String -> DeclaredFn -> DeclaredFn -> DeclaredFn
+refreshDeclaration key storeName passedKeyDeclaration =
     let
         name =
             "refresh" ++ capitalizeFirstCharacter key
@@ -1845,7 +1846,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports."
             (Elm.exposeWith { exposeConstructor = False, group = Just "Refresh Values" }
                 (Elm.declaration name
                     (Elm.withType Gen.Json.Encode.annotation_.value
-                        (encodeToJsAction.call
+                        ((encodeToJsAction storeName).call
                             (toJsActionTypeRefreshVariant.constructor (Gen.Maybe.make_.just passedKeyDeclaration.call))
                         )
                     )
@@ -1855,8 +1856,8 @@ This function returns a `Json.Encode.Value` which should be sent out via ports."
 
 
 {-| -}
-refreshDeclarations : Dict String DeclaredFn -> KeyDeclarations -> DeclaredFnGroup
-refreshDeclarations refreshers keys =
+refreshDeclarations : DeclaredFn -> Dict String DeclaredFn -> KeyDeclarations -> DeclaredFnGroup
+refreshDeclarations storeName refreshers keys =
     { call =
         \key ->
             Maybe.withDefault (Elm.val key)
@@ -1874,7 +1875,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports.
                                     (\key ->
                                         let
                                             otherwise =
-                                                encodeToJsAction.call
+                                                (encodeToJsAction storeName).call
                                                     (toJsActionTypeRefreshVariant.constructor
                                                         (Gen.Maybe.make_.just key)
                                                     )
@@ -1908,7 +1909,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports.
                     (Elm.exposeWith { exposeConstructor = False, group = Just "Refresh Values" }
                         (Elm.declaration "refreshAll"
                             (Elm.withType Gen.Json.Encode.annotation_.value
-                                (encodeToJsAction.call
+                                ((encodeToJsAction storeName).call
                                     (toJsActionTypeRefreshVariant.constructor Gen.Maybe.make_.nothing)
                                 )
                             )

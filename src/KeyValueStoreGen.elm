@@ -73,7 +73,7 @@ generate { fileName } json =
     let
         generated : Generated
         generated =
-            generateFromKeysValuePairs
+            generateFromKeysValuePairs storeName
                 (Result.withDefault []
                     (Json.Decode.decodeValue
                         (Json.Decode.keyValuePairs Json.Decode.value)
@@ -132,18 +132,18 @@ generate { fileName } json =
 
         refreshers : Internal.DeclaredFnGroup
         refreshers =
-            Internal.refreshDeclarations generated.refreshers keys
+            Internal.refreshDeclarations storeName generated.refreshers keys
 
         removers : Internal.DeclaredFn1Group
         removers =
-            Internal.removeDeclarations
+            Internal.removeDeclarations storeName
                 (Dict.map (\_ remover -> remover store) generated.removers)
                 keys
                 store
 
         set : Internal.DeclaredFn3
         set =
-            Internal.setDeclaration keys store decoders setters
+            Internal.setDeclaration storeName keys store decoders setters
 
         setters : Internal.DeclaredFn2Group
         setters =
@@ -181,7 +181,7 @@ generate { fileName } json =
         otherDeclarations : List Elm.Declaration
         otherDeclarations =
             [ decodeFromJs.declaration
-            , Internal.encodeToJsAction.declaration
+            , (Internal.encodeToJsAction storeName).declaration
             , toDict.declaration
             , fromDict.declaration
             , update.declaration
@@ -217,8 +217,8 @@ check out the examples folder at this packages Github repo: joeybright/key-value
 
 {-| Generates functions that generate code using the decoded JSON.
 -}
-generateFromKeysValuePairs : List ( String, Json.Decode.Value ) -> Generated
-generateFromKeysValuePairs =
+generateFromKeysValuePairs : Internal.DeclaredFn -> List ( String, Json.Decode.Value ) -> Generated
+generateFromKeysValuePairs storeName =
     List.foldr
         (\( key, value ) acc ->
             let
@@ -248,9 +248,9 @@ generateFromKeysValuePairs =
             , getters = Dict.insert key (Internal.getDeclaration key decodedValue) acc.getters
             , helpers = Dict.union helperDeclarations acc.helpers
             , keys = Dict.insert key generatedKeyDeclaration acc.keys
-            , refreshers = Dict.insert key (Internal.refreshDeclaration key generatedKeyDeclaration) acc.refreshers
-            , removers = Dict.insert key (Internal.removeDeclaration key generatedKeyDeclaration) acc.removers
-            , setters = Dict.insert key (Internal.setKeyDeclaration key decodedValue generatedKeyDeclaration generatedEncoder) acc.setters
+            , refreshers = Dict.insert key (Internal.refreshDeclaration key storeName generatedKeyDeclaration) acc.refreshers
+            , removers = Dict.insert key (Internal.removeDeclaration key storeName generatedKeyDeclaration) acc.removers
+            , setters = Dict.insert key (Internal.setKeyDeclaration key decodedValue storeName generatedKeyDeclaration generatedEncoder) acc.setters
             , types = Dict.insert key valueType acc.types
             }
         )
