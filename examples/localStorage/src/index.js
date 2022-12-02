@@ -23,10 +23,10 @@ window.addEventListener('storage', (e) => {
     This handles the app being open in different tabs. When the change happens in one tab,
     this will update the values in other open tabs to make sure everything is in sync!
     */
-    return app.ports.fromJs.send(store.refresh(e.key));
+    return app.ports.fromJs.send(store.refresh("localstorage", e.key));
 });
 
-app.ports.toJs.subscribe(function ({ tag, action, data }) {
+app.ports.toJs.subscribe(function ({ name, tag, action, data }) {
     switch (tag) {
         /* 
         Pattern matching here to recognize things coming through meant for the generated
@@ -34,6 +34,6 @@ app.ports.toJs.subscribe(function ({ tag, action, data }) {
         differently!
         */
         case store.keyValueStoreTag:
-            return store.process(tag, action, data, app.ports.fromJs.send);
+            return store.process(name, tag, action, data, app.ports.fromJs.send);
     };
 });

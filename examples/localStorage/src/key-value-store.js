@@ -39,19 +39,20 @@ export default function keyValueStore() {
     };
 
     // Refresh a key (or all keys)
-    function refresh(key) {
+    function refresh(name, key) {
         if (key == null) {
             /*
             If the key is null, this is taken as "refresh everything" rather than
             any specific key
             */
-            return getAll();
+            return getAll(name);
         } else {
             // Otherwise, try to get the item
             var item = keyValueStore.getItem(key);
             if (item) {
                 let value = JSON.parse(item);
                 return {
+                    name: name,
                     tag: KEY_VALUE_STORE_TAG,
                     action: REFRESH_ACTION_OK,
                     data: {
@@ -78,7 +79,7 @@ export default function keyValueStore() {
     };
 
     // Grab all the keys in localStorage and return them to Elm
-    function getAll() {
+    function getAll(name) {
         const allValues =
             Object.keys(keyValueStore)
                 .reduce(function (obj, str) {
@@ -86,6 +87,7 @@ export default function keyValueStore() {
                     return obj
                 }, {})
         return {
+            name: name,
             tag: KEY_VALUE_STORE_TAG,
             action: GET_ALL_OK_ACTION,
             data: allValues
@@ -110,24 +112,23 @@ export default function keyValueStore() {
     of actions sent to it. Not wiring this up or passing the incorrect function to this
     module will result in things not working.
     */
-    function process(tag, action, data, portFunc) {
+    function process(name, tag, action, data, portFunc) {
         checkLocalStorageNotFound();
         let result;
         switch (action) {
             case SET_ACTION:
-                result = set(data.key, data.value);
+                set(data.key, data.value);
 
             case REFRESH_ACTION:
-                result = refresh(data.key);
+                result = refresh(name, data.key);
                 return portFunc(result)
 
             case GET_ALL_ACTION:
-                result = getAll();
+                result = getAll(name);
                 return portFunc(result);
 
             case REMOVE_ACTION:
-                result = remove(data.key);
-                return portFunc(result);
+                remove(data.key);
 
             case null:
                 return null;
