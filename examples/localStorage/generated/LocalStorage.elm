@@ -356,7 +356,8 @@ encodeToJsAction toJsAction =
     let
         tagged tag action list =
             Json.Encode.object
-                [ ( "tag", Json.Encode.string tag )
+                [ ( "name", Json.Encode.string storeName )
+                , ( "tag", Json.Encode.string tag )
                 , ( "action", Json.Encode.string action )
                 , ( "data", Json.Encode.object list )
                 ]
