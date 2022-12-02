@@ -956,8 +956,8 @@ The value returned when the update works is the new `Store`. Save this to your m
 
 
 {-| -}
-decodeFromJsAction : KeyDeclarations -> DeclaredFn
-decodeFromJsAction keys =
+decodeFromJsAction : List String -> KeyDeclarations -> DeclaredFn
+decodeFromJsAction fileName keys =
     { call =
         Elm.val "decodeFromJsAction"
     , declaration =
@@ -966,48 +966,62 @@ need to be used elsewhere!"""
             (Elm.declaration "decodeFromJsAction"
                 (Elm.withType (Gen.Json.Decode.annotation_.decoder fromJsActionType.annotation)
                     (Gen.Json.Decode.andThen
-                        (\tagArg ->
-                            let
-                                tagActionTuple action =
-                                    Elm.toString
-                                        (Elm.tuple (Elm.string portTag) (Elm.string action))
-                            in
-                            Elm.Case.custom tagArg
-                                (Type.tuple Type.string Type.string)
-                                [ Elm.Case.branch0 (tagActionTuple "refresh.ok")
-                                    (Gen.Json.Decode.call_.map2 fromJsActionTypeRefreshOkVariant.value
-                                        (Gen.Json.Decode.at [ "data", "key" ] Gen.Json.Decode.string)
-                                        (Gen.Json.Decode.at [ "data", "value" ] Gen.Json.Decode.value)
-                                    )
-                                , Elm.Case.branch0 (tagActionTuple "getall.ok")
-                                    (Gen.Json.Decode.call_.map fromJsActionTypeGetAllOkVariant.value
-                                        (Gen.Json.Decode.at [ "data" ] Gen.Json.Decode.value)
-                                    )
-                                , Elm.Case.branch0 (tagActionTuple "notfound")
-                                    (Gen.Json.Decode.succeed
-                                        (fromJsActionTypeFromJsErrVariant.constructor
-                                            storeNotFoundVariant.constructor
-                                        )
-                                    )
-                                , Elm.Case.branch0 "_"
-                                    (Gen.Json.Decode.call_.succeed
-                                        (Elm.apply fromJsActionTypeFromJsUnknownVariant.value
-                                            [ Elm.Op.append (Elm.string "Unkonwn tag ") (Gen.Tuple.first tagArg)
-                                            ]
-                                        )
-                                    )
-                                ]
+                        (\storeName ->
+                            Elm.Case.string storeName
+                                { otherwise = Gen.Json.Decode.fail ""
+                                , cases =
+                                    [ ( storeNameFromFilePath fileName
+                                      , Gen.Json.Decode.andThen
+                                            (\tagArg ->
+                                                let
+                                                    _ =
+                                                        ""
+
+                                                    tagActionTuple action =
+                                                        Elm.toString
+                                                            (Elm.tuple (Elm.string portTag) (Elm.string action))
+                                                in
+                                                Elm.Case.custom tagArg
+                                                    (Type.tuple Type.string Type.string)
+                                                    [ Elm.Case.branch0 (tagActionTuple "refresh.ok")
+                                                        (Gen.Json.Decode.call_.map2 fromJsActionTypeRefreshOkVariant.value
+                                                            (Gen.Json.Decode.at [ "data", "key" ] Gen.Json.Decode.string)
+                                                            (Gen.Json.Decode.at [ "data", "value" ] Gen.Json.Decode.value)
+                                                        )
+                                                    , Elm.Case.branch0 (tagActionTuple "getall.ok")
+                                                        (Gen.Json.Decode.call_.map fromJsActionTypeGetAllOkVariant.value
+                                                            (Gen.Json.Decode.at [ "data" ] Gen.Json.Decode.value)
+                                                        )
+                                                    , Elm.Case.branch0 (tagActionTuple "notfound")
+                                                        (Gen.Json.Decode.succeed
+                                                            (fromJsActionTypeFromJsErrVariant.constructor
+                                                                storeNotFoundVariant.constructor
+                                                            )
+                                                        )
+                                                    , Elm.Case.branch0 "_"
+                                                        (Gen.Json.Decode.call_.succeed
+                                                            (Elm.apply fromJsActionTypeFromJsUnknownVariant.value
+                                                                [ Elm.Op.append (Elm.string "Unkonwn tag ") (Gen.Tuple.first tagArg)
+                                                                ]
+                                                            )
+                                                        )
+                                                    ]
+                                            )
+                                            (Gen.Json.Decode.call_.map2
+                                                (Elm.fn2 ( "tag", Nothing )
+                                                    ( "action", Nothing )
+                                                    (\tag action ->
+                                                        Gen.Tuple.pair (keys.process tag) (keys.process action)
+                                                    )
+                                                )
+                                                (Gen.Json.Decode.field "tag" Gen.Json.Decode.string)
+                                                (Gen.Json.Decode.field "action" Gen.Json.Decode.string)
+                                            )
+                                      )
+                                    ]
+                                }
                         )
-                        (Gen.Json.Decode.call_.map2
-                            (Elm.fn2 ( "tag", Nothing )
-                                ( "action", Nothing )
-                                (\tag action ->
-                                    Gen.Tuple.pair (keys.process tag) (keys.process action)
-                                )
-                            )
-                            (Gen.Json.Decode.field "tag" Gen.Json.Decode.string)
-                            (Gen.Json.Decode.field "action" Gen.Json.Decode.string)
-                        )
+                        (Gen.Json.Decode.field "name" Gen.Json.Decode.string)
                     )
                 )
             )
@@ -1392,6 +1406,12 @@ defaultDeclarations defaults =
     }
 
 
+{-| -}
+storeNameFromFilePath : List String -> String
+storeNameFromFilePath =
+    List.foldr (\part acc -> String.toLower part ++ acc) ""
+
+
 {-| Generates a name for this store based on the passed file name.
 -}
 storeNameDeclaration : List String -> DeclaredFn
@@ -1401,7 +1421,7 @@ storeNameDeclaration fileName =
             "storeName"
 
         storeName =
-            List.foldr (\part acc -> String.toLower part ++ acc) "" fileName
+            storeNameFromFilePath fileName
     in
     { call = Elm.val declarationName
     , declaration =

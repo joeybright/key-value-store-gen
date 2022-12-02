@@ -95,7 +95,7 @@ generate { fileName } json =
 
         decodeFromJs : Internal.DeclaredFn
         decodeFromJs =
-            Internal.decodeFromJsAction keys
+            Internal.decodeFromJsAction fileName keys
 
         update : Internal.DeclaredFn2
         update =
