@@ -1,4 +1,4 @@
-export default function keyValueStore() {
+export default function keyValueStore(storeName) {
     var keyValueStore; // Initiate a variable to store the reference to localStorage
 
     /* 
@@ -39,20 +39,20 @@ export default function keyValueStore() {
     };
 
     // Refresh a key (or all keys)
-    function refresh(name, key) {
+    function refresh(key) {
         if (key == null) {
             /*
             If the key is null, this is taken as "refresh everything" rather than
             any specific key
             */
-            return getAll(name);
+            return getAll(storeName);
         } else {
             // Otherwise, try to get the item
             var item = keyValueStore.getItem(key);
             if (item) {
                 let value = JSON.parse(item);
                 return {
-                    name: name,
+                    name: storeName,
                     tag: KEY_VALUE_STORE_TAG,
                     action: REFRESH_ACTION_OK,
                     data: {
@@ -112,7 +112,7 @@ export default function keyValueStore() {
     of actions sent to it. Not wiring this up or passing the incorrect function to this
     module will result in things not working.
     */
-    function process(name, tag, action, data, portFunc) {
+    function process(tag, action, data, portFunc) {
         checkLocalStorageNotFound();
         let result;
         switch (action) {
@@ -120,11 +120,11 @@ export default function keyValueStore() {
                 set(data.key, data.value);
 
             case REFRESH_ACTION:
-                result = refresh(name, data.key);
+                result = refresh(storeName, data.key);
                 return portFunc(result)
 
             case GET_ALL_ACTION:
-                result = getAll(name);
+                result = getAll(storeName);
                 return portFunc(result);
 
             case REMOVE_ACTION:
