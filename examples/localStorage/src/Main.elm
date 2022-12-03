@@ -152,9 +152,7 @@ update msg model =
 
         RemoveCount ->
             let
-                {- Run the `setCount` function to decrement it which returns the new
-                   `Store` and a `Json.Encode.Value` which needs to be sent out via ports.
-                -}
+                {- Run the `removeCount` function to remove the `count` key from localStorage -}
                 ( newStore, toJsValue ) =
                     LocalStorage.removeCount model.store
             in
