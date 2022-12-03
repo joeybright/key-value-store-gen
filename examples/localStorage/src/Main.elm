@@ -93,6 +93,7 @@ init flags =
 type Msg
     = IncrementCount
     | DecrementCount
+    | RemoveCount
     | UpdateLocalStorage LocalStorage.Store
     | NoOp
 
@@ -146,6 +147,18 @@ update msg model =
               {- And use the toJS port to send out the JSON to JavaScript to save the data
                  into localStorage
               -}
+            , toJs toJsValue
+            )
+
+        RemoveCount ->
+            let
+                {- Run the `setCount` function to decrement it which returns the new
+                   `Store` and a `Json.Encode.Value` which needs to be sent out via ports.
+                -}
+                ( newStore, toJsValue ) =
+                    LocalStorage.removeCount model.store
+            in
+            ( { model | store = newStore }
             , toJs toJsValue
             )
 
@@ -204,4 +217,5 @@ view model =
         [ text (String.fromInt currentCount)
         , button [ onClick IncrementCount ] [ text "+" ]
         , button [ onClick DecrementCount ] [ text "-" ]
+        , button [ onClick RemoveCount ] [ text "Remove Count" ]
         ]
