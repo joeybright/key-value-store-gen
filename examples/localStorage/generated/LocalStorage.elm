@@ -364,7 +364,8 @@ decodeFromJsAction =
                         )
 
                 _ ->
-                    Json.Decode.fail ""
+                    Json.Decode.fail
+                        "You're trying to update the store named localstorage, but the passed `name` field is not localstorage."
         )
         (Json.Decode.field "name" Json.Decode.string)
 

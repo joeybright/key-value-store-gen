@@ -968,15 +968,19 @@ need to be used elsewhere!"""
                     (Gen.Json.Decode.andThen
                         (\storeName ->
                             Elm.Case.string storeName
-                                { otherwise = Gen.Json.Decode.fail ""
+                                { otherwise =
+                                    Gen.Json.Decode.fail
+                                        ("You're trying to update the store named "
+                                            ++ storeNameFromFilePath fileName
+                                            ++ ", but the passed `name` field is not "
+                                            ++ storeNameFromFilePath fileName
+                                            ++ "."
+                                        )
                                 , cases =
                                     [ ( storeNameFromFilePath fileName
                                       , Gen.Json.Decode.andThen
                                             (\tagArg ->
                                                 let
-                                                    _ =
-                                                        ""
-
                                                     tagActionTuple action =
                                                         Elm.toString
                                                             (Elm.tuple (Elm.string portTag) (Elm.string action))
