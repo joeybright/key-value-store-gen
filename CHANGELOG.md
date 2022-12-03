@@ -2,6 +2,7 @@
 
 - The code generated now contains a `storeName` function. This name is generated from the file name passed when `KeyValueStoreGen.init` is called. All functions that return a `Json.Encode.Value` meant to be sent out via ports now also contain the name of the store. This can be used to save to the proper place when an app has multiple stores.
 - Added example using the new `storeName` functionality for indexedDB
+- Updated the localStorage example with new functionality and some bug fixes
 
 # 2.0.0
 
