@@ -96,7 +96,7 @@ export default function keyValueStore(storeName) {
 
     // Remove the passed key from localStorage
     function remove(key) {
-        keyValueStore.remove(key);
+        keyValueStore.removeItem(key);
         /* 
         For localStorage, there's nothing returned to Elm when trying to remove a key. 
         This is because it's assumed that, if this function is run, localStorage 
