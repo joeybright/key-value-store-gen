@@ -53,7 +53,7 @@ update msg model =
             ( model, Cmd.none )
 
         UpdateCount ->
-            ( { model | count = model.count + 1 }, Cmd.none )
+            ( { model | count = model.count + 1 }, toJs (Json.Encode.null) )
 
 
 subscriptions : Model -> Sub Msg
