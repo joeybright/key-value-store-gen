@@ -87,6 +87,12 @@ type Error
     = StoreNotFound
 
 
+{-| A name for this store, generated from its module name. -}
+storeName : String
+storeName =
+    "localstorage"
+
+
 {-| The decoded value from the count key.
                 
 This can be helpful as a fallback for when the `Value` for this key cannot be found or cannot be decoded!
@@ -311,35 +317,57 @@ decodeFromJsAction =
     Json.Decode.andThen
         (\andThenUnpack ->
             case andThenUnpack of
-                ( "key_value_store_gen", "refresh.ok" ) ->
-                    Json.Decode.map2
-                        FromJsRefreshOk
-                        (Json.Decode.at [ "data", "key" ] Json.Decode.string)
-                        (Json.Decode.at [ "data", "value" ] Json.Decode.value)
+                "localstorage" ->
+                    Json.Decode.andThen
+                        (\andThenUnpack0 ->
+                            case andThenUnpack0 of
+                                ( "key_value_store_gen", "refresh.ok" ) ->
+                                    Json.Decode.map2
+                                        FromJsRefreshOk
+                                        (Json.Decode.at
+                                            [ "data", "key" ]
+                                            Json.Decode.string
+                                        )
+                                        (Json.Decode.at
+                                            [ "data", "value" ]
+                                            Json.Decode.value
+                                        )
 
-                ( "key_value_store_gen", "getall.ok" ) ->
-                    Json.Decode.map
-                        FromJsGetAllOk
-                        (Json.Decode.at [ "data" ] Json.Decode.value)
+                                ( "key_value_store_gen", "getall.ok" ) ->
+                                    Json.Decode.map
+                                        FromJsGetAllOk
+                                        (Json.Decode.at
+                                            [ "data" ]
+                                            Json.Decode.value
+                                        )
 
-                ( "key_value_store_gen", "notfound" ) ->
-                    Json.Decode.succeed (FromJsErr StoreNotFound)
+                                ( "key_value_store_gen", "notfound" ) ->
+                                    Json.Decode.succeed
+                                        (FromJsErr StoreNotFound)
+
+                                _ ->
+                                    Json.Decode.succeed
+                                        (FromJsUnknown
+                                            ("Unkonwn tag "
+                                                ++ Tuple.first andThenUnpack0
+                                            )
+                                        )
+                        )
+                        (Json.Decode.map2
+                            (\tag action ->
+                                Tuple.pair
+                                    (String.toLower (String.trim tag))
+                                    (String.toLower (String.trim action))
+                            )
+                            (Json.Decode.field "tag" Json.Decode.string)
+                            (Json.Decode.field "action" Json.Decode.string)
+                        )
 
                 _ ->
-                    Json.Decode.succeed
-                        (FromJsUnknown
-                            ("Unkonwn tag " ++ Tuple.first andThenUnpack)
-                        )
+                    Json.Decode.fail
+                        "You're trying to update the store named localstorage, but the passed `name` field is not localstorage."
         )
-        (Json.Decode.map2
-            (\tag action ->
-                Tuple.pair
-                    (String.toLower (String.trim tag))
-                    (String.toLower (String.trim action))
-            )
-            (Json.Decode.field "tag" Json.Decode.string)
-            (Json.Decode.field "action" Json.Decode.string)
-        )
+        (Json.Decode.field "name" Json.Decode.string)
 
 
 {-| Encode a `ToJsAction` into a `Json.Encode.Value`. This is internal to this module and shouldn't
@@ -350,7 +378,8 @@ encodeToJsAction toJsAction =
     let
         tagged tag action list =
             Json.Encode.object
-                [ ( "tag", Json.Encode.string tag )
+                [ ( "name", Json.Encode.string storeName )
+                , ( "tag", Json.Encode.string tag )
                 , ( "action", Json.Encode.string action )
                 , ( "data", Json.Encode.object list )
                 ]

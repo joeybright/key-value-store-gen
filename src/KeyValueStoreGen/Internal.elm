@@ -16,6 +16,7 @@ module KeyValueStoreGen.Internal exposing
     , encoderDeclaration, encoderDeclarations
     , decoderDeclaration, decoderDeclarations
     , defaultDeclaration, defaultDeclarations
+    , storeNameDeclaration
     , setDeclaration, setKeyDeclaration, setKeyDeclarations
     , removeDeclaration, removeDeclarations
     , getDeclaration, getDeclarations
@@ -76,6 +77,8 @@ Functions for generating custom types and type aliases.
 @docs decoderDeclaration, decoderDeclarations
 
 @docs defaultDeclaration, defaultDeclarations
+
+@docs storeNameDeclaration
 
 @docs setDeclaration, setKeyDeclaration, setKeyDeclarations
 
@@ -953,8 +956,8 @@ The value returned when the update works is the new `Store`. Save this to your m
 
 
 {-| -}
-decodeFromJsAction : KeyDeclarations -> DeclaredFn
-decodeFromJsAction keys =
+decodeFromJsAction : List String -> KeyDeclarations -> DeclaredFn
+decodeFromJsAction fileName keys =
     { call =
         Elm.val "decodeFromJsAction"
     , declaration =
@@ -963,48 +966,66 @@ need to be used elsewhere!"""
             (Elm.declaration "decodeFromJsAction"
                 (Elm.withType (Gen.Json.Decode.annotation_.decoder fromJsActionType.annotation)
                     (Gen.Json.Decode.andThen
-                        (\tagArg ->
-                            let
-                                tagActionTuple action =
-                                    Elm.toString
-                                        (Elm.tuple (Elm.string portTag) (Elm.string action))
-                            in
-                            Elm.Case.custom tagArg
-                                (Type.tuple Type.string Type.string)
-                                [ Elm.Case.branch0 (tagActionTuple "refresh.ok")
-                                    (Gen.Json.Decode.call_.map2 fromJsActionTypeRefreshOkVariant.value
-                                        (Gen.Json.Decode.at [ "data", "key" ] Gen.Json.Decode.string)
-                                        (Gen.Json.Decode.at [ "data", "value" ] Gen.Json.Decode.value)
-                                    )
-                                , Elm.Case.branch0 (tagActionTuple "getall.ok")
-                                    (Gen.Json.Decode.call_.map fromJsActionTypeGetAllOkVariant.value
-                                        (Gen.Json.Decode.at [ "data" ] Gen.Json.Decode.value)
-                                    )
-                                , Elm.Case.branch0 (tagActionTuple "notfound")
-                                    (Gen.Json.Decode.succeed
-                                        (fromJsActionTypeFromJsErrVariant.constructor
-                                            storeNotFoundVariant.constructor
+                        (\storeName ->
+                            Elm.Case.string storeName
+                                { otherwise =
+                                    Gen.Json.Decode.fail
+                                        ("You're trying to update the store named "
+                                            ++ storeNameFromFilePath fileName
+                                            ++ ", but the passed `name` field is not "
+                                            ++ storeNameFromFilePath fileName
+                                            ++ "."
                                         )
-                                    )
-                                , Elm.Case.branch0 "_"
-                                    (Gen.Json.Decode.call_.succeed
-                                        (Elm.apply fromJsActionTypeFromJsUnknownVariant.value
-                                            [ Elm.Op.append (Elm.string "Unkonwn tag ") (Gen.Tuple.first tagArg)
-                                            ]
-                                        )
-                                    )
-                                ]
+                                , cases =
+                                    [ ( storeNameFromFilePath fileName
+                                      , Gen.Json.Decode.andThen
+                                            (\tagArg ->
+                                                let
+                                                    tagActionTuple action =
+                                                        Elm.toString
+                                                            (Elm.tuple (Elm.string portTag) (Elm.string action))
+                                                in
+                                                Elm.Case.custom tagArg
+                                                    (Type.tuple Type.string Type.string)
+                                                    [ Elm.Case.branch0 (tagActionTuple "refresh.ok")
+                                                        (Gen.Json.Decode.call_.map2 fromJsActionTypeRefreshOkVariant.value
+                                                            (Gen.Json.Decode.at [ "data", "key" ] Gen.Json.Decode.string)
+                                                            (Gen.Json.Decode.at [ "data", "value" ] Gen.Json.Decode.value)
+                                                        )
+                                                    , Elm.Case.branch0 (tagActionTuple "getall.ok")
+                                                        (Gen.Json.Decode.call_.map fromJsActionTypeGetAllOkVariant.value
+                                                            (Gen.Json.Decode.at [ "data" ] Gen.Json.Decode.value)
+                                                        )
+                                                    , Elm.Case.branch0 (tagActionTuple "notfound")
+                                                        (Gen.Json.Decode.succeed
+                                                            (fromJsActionTypeFromJsErrVariant.constructor
+                                                                storeNotFoundVariant.constructor
+                                                            )
+                                                        )
+                                                    , Elm.Case.branch0 "_"
+                                                        (Gen.Json.Decode.call_.succeed
+                                                            (Elm.apply fromJsActionTypeFromJsUnknownVariant.value
+                                                                [ Elm.Op.append (Elm.string "Unkonwn tag ") (Gen.Tuple.first tagArg)
+                                                                ]
+                                                            )
+                                                        )
+                                                    ]
+                                            )
+                                            (Gen.Json.Decode.call_.map2
+                                                (Elm.fn2 ( "tag", Nothing )
+                                                    ( "action", Nothing )
+                                                    (\tag action ->
+                                                        Gen.Tuple.pair (keys.process tag) (keys.process action)
+                                                    )
+                                                )
+                                                (Gen.Json.Decode.field "tag" Gen.Json.Decode.string)
+                                                (Gen.Json.Decode.field "action" Gen.Json.Decode.string)
+                                            )
+                                      )
+                                    ]
+                                }
                         )
-                        (Gen.Json.Decode.call_.map2
-                            (Elm.fn2 ( "tag", Nothing )
-                                ( "action", Nothing )
-                                (\tag action ->
-                                    Gen.Tuple.pair (keys.process tag) (keys.process action)
-                                )
-                            )
-                            (Gen.Json.Decode.field "tag" Gen.Json.Decode.string)
-                            (Gen.Json.Decode.field "action" Gen.Json.Decode.string)
-                        )
+                        (Gen.Json.Decode.field "name" Gen.Json.Decode.string)
                     )
                 )
             )
@@ -1012,8 +1033,8 @@ need to be used elsewhere!"""
 
 
 {-| -}
-encodeToJsAction : DeclaredFn1
-encodeToJsAction =
+encodeToJsAction : DeclaredFn -> DeclaredFn1
+encodeToJsAction storeName =
     let
         functionBody caseArg taggedExpression =
             Elm.Case.custom caseArg
@@ -1071,7 +1092,8 @@ need to be used elsewhere!"""
                                     ( "list", Nothing )
                                     (\tag action list ->
                                         Gen.Json.Encode.object
-                                            [ Elm.tuple (Elm.string "tag") (Gen.Json.Encode.call_.string tag)
+                                            [ Elm.tuple (Elm.string "name") (Gen.Json.Encode.call_.string storeName.call)
+                                            , Elm.tuple (Elm.string "tag") (Gen.Json.Encode.call_.string tag)
                                             , Elm.tuple (Elm.string "action") (Gen.Json.Encode.call_.string action)
                                             , Elm.tuple (Elm.string "data") (Gen.Json.Encode.call_.object list)
                                             ]
@@ -1389,8 +1411,35 @@ defaultDeclarations defaults =
 
 
 {-| -}
-setDeclaration : KeyDeclarations -> StoreType -> DeclaredFnGroup -> DeclaredFn2Group -> DeclaredFn3
-setDeclaration passedKeyDeclarations storage decode setters =
+storeNameFromFilePath : List String -> String
+storeNameFromFilePath =
+    List.foldr (\part acc -> String.toLower part ++ acc) ""
+
+
+{-| Generates a name for this store based on the passed file name.
+-}
+storeNameDeclaration : List String -> DeclaredFn
+storeNameDeclaration fileName =
+    let
+        declarationName =
+            "storeName"
+
+        storeName =
+            storeNameFromFilePath fileName
+    in
+    { call = Elm.val declarationName
+    , declaration =
+        Elm.withDocumentation
+            """A name for this store, generated from its module name."""
+            (Elm.declaration declarationName
+                (Elm.string storeName)
+            )
+    }
+
+
+{-| -}
+setDeclaration : DeclaredFn -> KeyDeclarations -> StoreType -> DeclaredFnGroup -> DeclaredFn2Group -> DeclaredFn3
+setDeclaration storeName passedKeyDeclarations storage decode setters =
     let
         name =
             "set"
@@ -1431,7 +1480,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                     (storage.constructor storageVal
                                                         (Gen.Dict.insert key keyValue dictVal)
                                                     )
-                                                    (encodeToJsAction.call
+                                                    ((encodeToJsAction storeName).call
                                                         (toJsActionTypeSetVariant.constructor key keyValue)
                                                     )
                                             )
@@ -1469,7 +1518,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                                             (storage.constructor storageVal
                                                                                 (Gen.Dict.insert key keyValue dictVal)
                                                                             )
-                                                                            (encodeToJsAction.call
+                                                                            ((encodeToJsAction storeName).call
                                                                                 (toJsActionTypeSetVariant.constructor key keyValue)
                                                                             )
                                                                     }
@@ -1486,8 +1535,8 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
 
 
 {-| -}
-setKeyDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
-setKeyDeclaration key decodedValue passedKeyDeclaration generatedEncoder storage =
+setKeyDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
+setKeyDeclaration key decodedValue storeName passedKeyDeclaration generatedEncoder storage =
     let
         name =
             "set" ++ capitalizeFirstCharacter key
@@ -1525,7 +1574,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                 )
                                                 dictVal
                                             )
-                                            (encodeToJsAction.call
+                                            ((encodeToJsAction storeName).call
                                                 (toJsActionTypeSetVariant.constructor
                                                     passedKeyDeclaration.call
                                                     (generatedEncoder.call val)
@@ -1555,8 +1604,8 @@ setKeyDeclarations setters =
 
 
 {-| -}
-removeDeclaration : String -> DeclaredFn -> StoreType -> DeclaredFn1
-removeDeclaration key passedKeyDeclaration storage =
+removeDeclaration : String -> DeclaredFn -> DeclaredFn -> StoreType -> DeclaredFn1
+removeDeclaration key storeName passedKeyDeclaration storage =
     let
         name =
             "remove" ++ capitalizeFirstCharacter key
@@ -1597,7 +1646,7 @@ key from the external store.
                                                 )
                                                 dictVal
                                             )
-                                            (encodeToJsAction.call
+                                            ((encodeToJsAction storeName).call
                                                 (toJsActionTypeRemoveVariant.constructor
                                                     passedKeyDeclaration.call
                                                 )
@@ -1612,8 +1661,8 @@ key from the external store.
 
 
 {-| -}
-removeDeclarations : Dict String DeclaredFn1 -> KeyDeclarations -> StoreType -> DeclaredFn1Group
-removeDeclarations removers passedKeyDeclaration storage =
+removeDeclarations : DeclaredFn -> Dict String DeclaredFn1 -> KeyDeclarations -> StoreType -> DeclaredFn1Group
+removeDeclarations storeName removers passedKeyDeclaration storage =
     let
         call key arg =
             Maybe.withDefault (Elm.val key)
@@ -1653,7 +1702,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                                                                 storageVal
                                                                 (Gen.Dict.remove key dictVal)
                                                             )
-                                                            (encodeToJsAction.call
+                                                            ((encodeToJsAction storeName).call
                                                                 (toJsActionTypeRemoveVariant.constructor key)
                                                             )
                                                 in
@@ -1802,8 +1851,8 @@ function for those known keys!
 
 
 {-| -}
-refreshDeclaration : String -> DeclaredFn -> DeclaredFn
-refreshDeclaration key passedKeyDeclaration =
+refreshDeclaration : String -> DeclaredFn -> DeclaredFn -> DeclaredFn
+refreshDeclaration key storeName passedKeyDeclaration =
     let
         name =
             "refresh" ++ capitalizeFirstCharacter key
@@ -1821,7 +1870,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports."
             (Elm.exposeWith { exposeConstructor = False, group = Just "Refresh Values" }
                 (Elm.declaration name
                     (Elm.withType Gen.Json.Encode.annotation_.value
-                        (encodeToJsAction.call
+                        ((encodeToJsAction storeName).call
                             (toJsActionTypeRefreshVariant.constructor (Gen.Maybe.make_.just passedKeyDeclaration.call))
                         )
                     )
@@ -1831,8 +1880,8 @@ This function returns a `Json.Encode.Value` which should be sent out via ports."
 
 
 {-| -}
-refreshDeclarations : Dict String DeclaredFn -> KeyDeclarations -> DeclaredFnGroup
-refreshDeclarations refreshers keys =
+refreshDeclarations : DeclaredFn -> Dict String DeclaredFn -> KeyDeclarations -> DeclaredFnGroup
+refreshDeclarations storeName refreshers keys =
     { call =
         \key ->
             Maybe.withDefault (Elm.val key)
@@ -1850,7 +1899,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports.
                                     (\key ->
                                         let
                                             otherwise =
-                                                encodeToJsAction.call
+                                                (encodeToJsAction storeName).call
                                                     (toJsActionTypeRefreshVariant.constructor
                                                         (Gen.Maybe.make_.just key)
                                                     )
@@ -1884,7 +1933,7 @@ This function returns a `Json.Encode.Value` which should be sent out via ports.
                     (Elm.exposeWith { exposeConstructor = False, group = Just "Refresh Values" }
                         (Elm.declaration "refreshAll"
                             (Elm.withType Gen.Json.Encode.annotation_.value
-                                (encodeToJsAction.call
+                                ((encodeToJsAction storeName).call
                                     (toJsActionTypeRefreshVariant.constructor Gen.Maybe.make_.nothing)
                                 )
                             )

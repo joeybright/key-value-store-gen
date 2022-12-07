@@ -1,4 +1,4 @@
-export default function keyValueStore() {
+export default function keyValueStore(storeName) {
     var keyValueStore; // Initiate a variable to store the reference to localStorage
 
     /* 
@@ -45,13 +45,14 @@ export default function keyValueStore() {
             If the key is null, this is taken as "refresh everything" rather than
             any specific key
             */
-            return getAll();
+            return getAll(storeName);
         } else {
             // Otherwise, try to get the item
             var item = keyValueStore.getItem(key);
             if (item) {
                 let value = JSON.parse(item);
                 return {
+                    name: storeName,
                     tag: KEY_VALUE_STORE_TAG,
                     action: REFRESH_ACTION_OK,
                     data: {
@@ -78,7 +79,7 @@ export default function keyValueStore() {
     };
 
     // Grab all the keys in localStorage and return them to Elm
-    function getAll() {
+    function getAll(name) {
         const allValues =
             Object.keys(keyValueStore)
                 .reduce(function (obj, str) {
@@ -86,6 +87,7 @@ export default function keyValueStore() {
                     return obj
                 }, {})
         return {
+            name: name,
             tag: KEY_VALUE_STORE_TAG,
             action: GET_ALL_OK_ACTION,
             data: allValues
@@ -94,7 +96,7 @@ export default function keyValueStore() {
 
     // Remove the passed key from localStorage
     function remove(key) {
-        keyValueStore.remove(key);
+        keyValueStore.removeItem(key);
         /* 
         For localStorage, there's nothing returned to Elm when trying to remove a key. 
         This is because it's assumed that, if this function is run, localStorage 
@@ -115,19 +117,18 @@ export default function keyValueStore() {
         let result;
         switch (action) {
             case SET_ACTION:
-                result = set(data.key, data.value);
+                set(data.key, data.value);
 
             case REFRESH_ACTION:
-                result = refresh(data.key);
+                result = refresh(storeName, data.key);
                 return portFunc(result)
 
             case GET_ALL_ACTION:
-                result = getAll();
+                result = getAll(storeName);
                 return portFunc(result);
 
             case REMOVE_ACTION:
-                result = remove(data.key);
-                return portFunc(result);
+                remove(data.key);
 
             case null:
                 return null;

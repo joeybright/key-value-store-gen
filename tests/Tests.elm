@@ -5,8 +5,64 @@ import Elm
 import Elm.Annotation as Type
 import Elm.ToString
 import Expect
+import Json.Encode
+import KeyValueStoreGen
 import KeyValueStoreGen.Internal
 import Test exposing (describe, test)
+
+
+storeNameTests : Test.Test
+storeNameTests =
+    let
+        { contents } =
+            KeyValueStoreGen.generate
+                (KeyValueStoreGen.init [ "LocalStorage" ])
+                (Json.Encode.object
+                    [ ( "count", Json.Encode.int 0 )
+                    ]
+                )
+
+        { call, declaration } =
+            KeyValueStoreGen.Internal.storeNameDeclaration [ "Test", "File" ]
+    in
+    describe "Tests for the `storeName` declaration"
+        [ test "A `storeName` function is generated as part of a file that is of type String of the passed file name"
+            (\_ ->
+                Expect.equal True
+                    (String.contains """storeName : String
+storeName =
+    "localstorage"
+"""
+                        contents
+                    )
+            )
+        , test "`storeNameDeclaration` returns expected declaration"
+            (\_ ->
+                Expect.equal
+                    { body = """storeName : String
+storeName =
+    "testfile"
+
+
+"""
+                    , docs = "A name for this store, generated from its module name."
+                    , imports = """import
+import"""
+                    , signature = "storeName : String"
+                    }
+                    (Elm.ToString.declaration declaration)
+            )
+        , test "`storeNameDeclaration` produces the correct code when calling the generated declaration"
+            (\_ ->
+                Expect.equal
+                    { body = """storeName"""
+                    , imports = """import
+import"""
+                    , signature = "storeName"
+                    }
+                    (Elm.ToString.expression call)
+            )
+        ]
 
 
 declaredTypeAliasTest :

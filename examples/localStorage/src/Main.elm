@@ -93,6 +93,8 @@ init flags =
 type Msg
     = IncrementCount
     | DecrementCount
+    | RemoveCount
+    | RefreshCount
     | UpdateLocalStorage LocalStorage.Store
     | NoOp
 
@@ -147,6 +149,26 @@ update msg model =
                  into localStorage
               -}
             , toJs toJsValue
+            )
+
+        RemoveCount ->
+            let
+                {- Run the `removeCount` function to remove the `count` key from localStorage -}
+                ( newStore, toJsValue ) =
+                    LocalStorage.removeCount model.store
+            in
+            ( { model | store = newStore }
+            , toJs toJsValue
+            )
+
+        RefreshCount ->
+            {- Run the `refreshCount` function which produces a Json.Encode.Value that can be
+               sent out via ports to grab the `count` value from localStorage. The resulting value
+               will be passed back to Elm via ports. It'll be updated through the `fromJs`
+               subscription.
+            -}
+            ( model
+            , toJs LocalStorage.refreshCount
             )
 
         {- This case is for handling successful update to the `Store` via JavaScript through
@@ -204,4 +226,6 @@ view model =
         [ text (String.fromInt currentCount)
         , button [ onClick IncrementCount ] [ text "+" ]
         , button [ onClick DecrementCount ] [ text "-" ]
+        , button [ onClick RefreshCount ] [ text "Refresh Values" ]
+        , button [ onClick RemoveCount ] [ text "Remove Count" ]
         ]

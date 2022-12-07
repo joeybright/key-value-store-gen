@@ -3,9 +3,11 @@ import keyValueStore from "./key-value-store.js"
 
 /*
 Running the keyValueStore() sets up the store for us and makes sure localStorage
-exists in this browser
+exists in this browser. This function takes a single parameter which is the name
+of the store. Make sure this matches the name in the generated `LocalStorage` Elm
+module!
 */
-const store = keyValueStore();
+const store = keyValueStore("localstorage");
 
 var app = Elm.Main.init({
     node: document.getElementById("root"),
