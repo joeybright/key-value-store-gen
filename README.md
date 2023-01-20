@@ -1,6 +1,6 @@
 # key-value-store-gen
 
-A package for generating code that makes it easy to integrate with key-value stores through ports.
+A package for generating code that makes it easy to integrate with key-value stores through ports
 
 ## What is This?
 
