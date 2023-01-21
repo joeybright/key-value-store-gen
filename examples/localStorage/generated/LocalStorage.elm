@@ -1,4 +1,4 @@
-module LocalStorage exposing (Error(..), KnownKeys, Store, Value(..), countDefault, decode, empty, encode, get, getAll, getCount, refresh, refreshAll, refreshCount, remove, removeCount, set, setCount, update)
+module LocalStorage exposing (Error(..), KnownKeys, Store, Value(..), countDefault, decode, dictTestDefault, empty, encode, get, getAll, getCount, getDictTest, refresh, refreshAll, refreshCount, refreshDictTest, remove, removeCount, removeDictTest, set, setCount, setDictTest, update)
 
 {-| 
 This is a generated module created by the key-value-store-gen package and the elm-codegen package.
@@ -9,23 +9,23 @@ check out the examples folder at this packages Github repo: joeybright/key-value
 
 ## Defaults
 
-@docs countDefault
+@docs dictTestDefault, countDefault
 
 ## Getters
 
-@docs getAll, get, getCount
+@docs getAll, get, getDictTest, getCount
 
 ## Refresh Values
 
-@docs refreshAll, refresh, refreshCount
+@docs refreshAll, refresh, refreshDictTest, refreshCount
 
 ## Removers
 
-@docs remove, removeCount
+@docs remove, removeDictTest, removeCount
 
 ## Setters
 
-@docs setCount, set
+@docs setDictTest, setCount, set
 
 ## Types
 
@@ -49,7 +49,7 @@ type Store
 
 {-| A type alias for the decoded Json. -}
 type alias KnownKeys =
-    { count : Value Int }
+    { count : Value Int, dictTest : Value (Dict.Dict String String) }
 
 
 {-| A custom type to represent a value from the external store. There are three variants:
@@ -90,7 +90,7 @@ type Error
 {-| A name for this store, generated from its module name. -}
 storeName : String
 storeName =
-    "localstorage"
+    "LocalStorage"
 
 
 {-| The decoded value from the count key.
@@ -100,6 +100,21 @@ This can be helpful as a fallback for when the `Value` for this key cannot be fo
 countDefault : Int
 countDefault =
     0
+
+
+{-| The decoded value from the dictTest key.
+                
+This can be helpful as a fallback for when the `Value` for this key cannot be found or cannot be decoded!
+-}
+dictTestDefault : Dict.Dict comparable v
+dictTestDefault =
+    Dict.fromList []
+
+
+{-| A helper function used within this module for the dictTest key. -}
+dictTestKey : String
+dictTestKey =
+    "dictTest"
 
 
 {-| A helper function used within this module for the count key. -}
@@ -132,12 +147,50 @@ decodeCount =
         ]
 
 
+{-| The generated decoder for the dictTest key. -}
+decodeDictTest : Json.Decode.Decoder (Value (Dict.Dict String String))
+decodeDictTest =
+    Json.Decode.oneOf
+        [ Json.Decode.null (Empty)
+        , Json.Decode.andThen
+            (\andThenUnpack ->
+                Maybe.withDefault
+                    (Json.Decode.map UnknownValue Json.Decode.value)
+                    (Maybe.map
+                        (\mapUnpack ->
+                            Json.Decode.succeed (KnownValue mapUnpack)
+                        )
+                        andThenUnpack
+                    )
+            )
+            (Json.Decode.oneOf
+                [ Json.Decode.map Just (Json.Decode.dict Json.Decode.string)
+                , Json.Decode.succeed Nothing
+                ]
+            )
+        ]
+
+
 {-| The generated encoder for the count key. -}
 encodeCount : Value Int -> Json.Encode.Value
 encodeCount count =
     case count of
         KnownValue value ->
             Json.Encode.int value
+
+        UnknownValue value ->
+            value
+
+        Empty ->
+            Json.Encode.null
+
+
+{-| The generated encoder for the dictTest key. -}
+encodeDictTest : Value (Dict.Dict String String) -> Json.Encode.Value
+encodeDictTest dictTest =
+    case dictTest of
+        KnownValue value ->
+            Json.Encode.dict Basics.identity Json.Encode.string value
 
         UnknownValue value ->
             value
@@ -168,9 +221,12 @@ set storeArg key keyValue =
         (Store knownValues unknownValues) =
             storeArg
     in
-    case String.toLower (String.trim key) of
+    case String.trim key of
         "count" ->
             setExistingKey (setCount  ) (decodeCount)
+
+        "dictTest" ->
+            setExistingKey (setDictTest  ) (decodeDictTest)
 
         _ ->
             ( Store knownValues (Dict.insert key keyValue unknownValues)
@@ -194,6 +250,23 @@ setCount storeArg countValue =
     )
 
 
+{-| Set the value of the dictTest key.
+        
+This function returns a tuple. The first index is the new `Store` with the updated dictTest value. Save this 
+to your model. The second is a `Json.Encode.Value` which should be sent out via ports and saved.
+-}
+setDictTest :
+    Store -> Value (Dict.Dict String String) -> ( Store, Json.Encode.Value )
+setDictTest storeArg dictTestValue =
+    let
+        (Store knownValues unknownValues) =
+            storeArg
+    in
+    ( Store { knownValues | dictTest = dictTestValue } unknownValues
+    , encodeToJsAction (ToJsSet dictTestKey (encodeDictTest dictTestValue))
+    )
+
+
 {-| Get the current `Value` of the count key from the `Store`.
 
 If the returned `Value` is `UnknownValue` or `Empty`, you can use the `countDefault` function as a 
@@ -209,6 +282,21 @@ getCount storeArg =
             knownValues.count
 
 
+{-| Get the current `Value` of the dictTest key from the `Store`.
+
+If the returned `Value` is `UnknownValue` or `Empty`, you can use the `dictTestDefault` function as a 
+fallback value!
+
+This function does not update the {key} value from the external store. If you want to do that, use 
+the `refreshDictTest` function!
+-}
+getDictTest : Store -> Value (Dict.Dict String String)
+getDictTest storeArg =
+    case storeArg of
+        Store knownValues _ ->
+            knownValues.dictTest
+
+
 {-| Get an arbitrary key from the `Store` if it exists.
 
 If you pass a known key (a key that was in the passed JSON during code generation), this function will 
@@ -221,9 +309,12 @@ get storeArg key =
         (Store _ unknownValues) =
             storeArg
     in
-    case String.toLower (String.trim key) of
+    case String.trim key of
         "count" ->
             Just (encodeCount (getCount storeArg))
+
+        "dictTest" ->
+            Just (encodeDictTest (getDictTest storeArg))
 
         _ ->
             Dict.get key unknownValues
@@ -253,6 +344,24 @@ removeCount storeArg =
     )
 
 
+{-| Remove the dictTest key from the `Store`. This turns the `Value` of the dictTest key in the `Store`
+to `Empty`.
+
+This function returns a tuple. The first index is the new `Store` with the updated value. Save this 
+to your model. The second is a `Json.Encode.Value` which should be sent out via ports to remove the
+key from the external store.
+-}
+removeDictTest : Store -> ( Store, Json.Encode.Value )
+removeDictTest storeArg =
+    let
+        (Store knownValues unknownValues) =
+            storeArg
+    in
+    ( Store { knownValues | dictTest = Empty } unknownValues
+    , encodeToJsAction (ToJsRemove dictTestKey)
+    )
+
+
 {-| Get an arbitrary key from the `Store` if it exists.
 
 If you pass a known key (a key that was in the passed JSON during code generation), that key will
@@ -267,9 +376,12 @@ remove storage key =
         (Store knownValues unknownValues) =
             storage
     in
-    case String.toLower (String.trim key) of
+    case String.trim key of
         "count" ->
             removeCount storage
+
+        "dictTest" ->
+            removeDictTest storage
 
         _ ->
             ( Store knownValues (Dict.remove key unknownValues)
@@ -286,15 +398,27 @@ refreshCount =
     encodeToJsAction (ToJsRefresh (Just countKey))
 
 
+{-| Refresh the dictTest key.
+
+This function returns a `Json.Encode.Value` which should be sent out via ports.
+-}
+refreshDictTest : Json.Encode.Value
+refreshDictTest =
+    encodeToJsAction (ToJsRefresh (Just dictTestKey))
+
+
 {-| Refresh the `Value` of an arbitrary key in the `Store` if it exists.
 
 This function returns a `Json.Encode.Value` which should be sent out via ports.
 -}
 refresh : String -> Json.Encode.Value
 refresh key =
-    case String.toLower (String.trim key) of
+    case String.trim key of
         "count" ->
             refreshCount
+
+        "dictTest" ->
+            refreshDictTest
 
         _ ->
             encodeToJsAction (ToJsRefresh (Just key))
@@ -317,7 +441,7 @@ decodeFromJsAction =
     Json.Decode.andThen
         (\andThenUnpack ->
             case andThenUnpack of
-                "localstorage" ->
+                "LocalStorage" ->
                     Json.Decode.andThen
                         (\andThenUnpack0 ->
                             case andThenUnpack0 of
@@ -356,8 +480,8 @@ decodeFromJsAction =
                         (Json.Decode.map2
                             (\tag action ->
                                 Tuple.pair
-                                    (String.toLower (String.trim tag))
-                                    (String.toLower (String.trim action))
+                                    (String.trim tag)
+                                    (String.trim action)
                             )
                             (Json.Decode.field "tag" Json.Decode.string)
                             (Json.Decode.field "action" Json.Decode.string)
@@ -365,7 +489,7 @@ decodeFromJsAction =
 
                 _ ->
                     Json.Decode.fail
-                        "You're trying to update the store named localstorage, but the passed `name` field is not localstorage."
+                        "You're trying to update the store named LocalStorage, but the passed `name` field is not LocalStorage."
         )
         (Json.Decode.field "name" Json.Decode.string)
 
@@ -422,7 +546,11 @@ toDict storage =
             storage
     in
     Dict.union
-        (Dict.fromList [ ( countKey, encodeCount knownValues.count ) ])
+        (Dict.fromList
+            [ ( countKey, encodeCount knownValues.count )
+            , ( dictTestKey, encodeDictTest knownValues.dictTest )
+            ]
+        )
         unknownValues
 
 
@@ -445,14 +573,19 @@ fromDict passedDict =
                         Err _ ->
                             acc
             in
-            case String.toLower (String.trim key) of
+            case String.trim key of
                 "count" ->
                     addArg (decodeCount) (\val obj -> { obj | count = val })
+
+                "dictTest" ->
+                    addArg
+                        (decodeDictTest)
+                        (\val obj -> { obj | dictTest = val })
 
                 _ ->
                     Store knownValues (Dict.insert key value unknownValues)
         )
-        (Store (KnownKeys (Empty)) Dict.empty)
+        (Store (KnownKeys (Empty) (Empty)) Dict.empty)
         (Dict.toList passedDict)
 
 
@@ -525,7 +658,7 @@ decoding JSON from ports!
 -}
 empty : Store
 empty =
-    Store { count = Empty } Dict.empty
+    Store { count = Empty, dictTest = Empty } Dict.empty
 
 
 {-| Encode the entire `Store`. This value can be passed back into the `init` function to reconstruct the 
