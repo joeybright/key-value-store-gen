@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser
+import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -91,7 +92,8 @@ init flags =
 
 
 type Msg
-    = IncrementCount
+    = AddToDict
+    | IncrementCount
     | DecrementCount
     | RemoveCount
     | RefreshCount
@@ -119,6 +121,34 @@ update msg model =
                     LocalStorage.countDefault
     in
     case msg of
+        AddToDict ->
+            let
+                currentDictTest : Dict.Dict String String
+                currentDictTest =
+                    case LocalStorage.getDictTest model.store of
+                        LocalStorage.KnownValue val ->
+                            val
+
+                        _ ->
+                            LocalStorage.dictTestDefault
+
+                {- Run the `setCount` function to increment it which returns the new
+                   `Store` and a `Json.Encode.Value` which needs to be sent out via ports.
+                -}
+                ( newStore, toJsValue ) =
+                    LocalStorage.setDictTest model.store
+                        (LocalStorage.KnownValue
+                            (Dict.insert (String.fromInt (currentCount + 1) ++ "a") "" currentDictTest)
+                        )
+            in
+            {- Set the newStore in the model -}
+            ( { model | store = newStore }
+              {- And use the toJS port to send out the JSON to JavaScript to save the data
+                 into localStorage
+              -}
+            , toJs toJsValue
+            )
+
         IncrementCount ->
             let
                 {- Run the `setCount` function to increment it which returns the new
@@ -218,14 +248,33 @@ view model =
 
                 _ ->
                     LocalStorage.countDefault
+
+        currentDictTest : Dict.Dict String String
+        currentDictTest =
+            case LocalStorage.getDictTest model.store of
+                LocalStorage.KnownValue val ->
+                    val
+
+                _ ->
+                    LocalStorage.dictTestDefault
     in
     {- A simple interface for incrementing and decrementing the `count` key in the
        generated `Store` and in the browsers localStorage.
     -}
     div []
-        [ text (String.fromInt currentCount)
-        , button [ onClick IncrementCount ] [ text "+" ]
-        , button [ onClick DecrementCount ] [ text "-" ]
-        , button [ onClick RefreshCount ] [ text "Refresh Values" ]
-        , button [ onClick RemoveCount ] [ text "Remove Count" ]
+        [ div []
+            [ text (String.fromInt currentCount)
+            , button [ onClick IncrementCount ] [ text "+" ]
+            , button [ onClick DecrementCount ] [ text "-" ]
+            , button [ onClick RefreshCount ] [ text "Refresh Values" ]
+            , button [ onClick RemoveCount ] [ text "Remove Count" ]
+            ]
+        , div []
+            (List.map
+                (\( key, val ) ->
+                    div [] [ text key, text val ]
+                )
+                (Dict.toList currentDictTest)
+            )
+        , button [ onClick AddToDict ] [ text "Add to Dict" ]
         ]

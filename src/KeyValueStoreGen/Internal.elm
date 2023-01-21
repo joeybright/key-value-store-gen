@@ -1,5 +1,6 @@
 module KeyValueStoreGen.Internal exposing
-    ( DeclaredFn, DeclaredFn1, DeclaredFn2, DeclaredFn3
+    ( Value(..), WithDictSupport(..)
+    , DeclaredFn, DeclaredFn1, DeclaredFn2, DeclaredFn3
     , DeclaredFnGroup, DeclaredFn1Group, DeclaredFn2Group
     , DeclaredCustomType, DeclaredTypeAlias
     , StoreType, KeyDeclarations
@@ -22,12 +23,16 @@ module KeyValueStoreGen.Internal exposing
     , getDeclaration, getDeclarations
     , refreshDeclaration, refreshDeclarations
     , keyDeclaration, keyDeclarations
+    , jsonToValue
+    , valueToAnnotation, valueToDecoder
     )
 
 {-| Internal workings of the `KeyValueStore` module.
 
 
 ## Types
+
+@docs Value, WithDictSupport
 
 A set of types aliases for declared functions.
 
@@ -90,6 +95,13 @@ Functions for generating custom types and type aliases.
 
 @docs keyDeclaration, keyDeclarations
 
+
+## Helpers
+
+@docs jsonToValue
+
+@docs valueToAnnotation, valueToDecoder
+
 -}
 
 import Dict exposing (Dict)
@@ -107,6 +119,8 @@ import Gen.Maybe
 import Gen.Result
 import Gen.String
 import Gen.Tuple
+import Json.Decode
+import Json.Encode
 import JsonToElm
 import JsonToElm.Gen
 
@@ -124,6 +138,25 @@ portTag =
 
 
 -- Types
+
+
+{-| An internal type to help differentiate between a value that is a `JsonValue` or another
+value type that this module support generating code for.
+
+Currently support `Dict` values, but may support other values like custom types in the future.
+
+-}
+type Value
+    = JsonValue JsonToElm.JsonValue
+    | DictValue Value
+
+
+{-| A custom type representing the type of `Dict` support a `Store` has. Currently only two
+options, but the type leaves room for more customization of this feature in the future.
+-}
+type WithDictSupport
+    = WithDictSupport
+    | WithoutDictSupport
 
 
 {-| A function that accepts no arguments.
@@ -1288,7 +1321,7 @@ used elsewhere!"""
 
 
 {-| -}
-encoderDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn1
+encoderDeclaration : String -> Value -> DeclaredFn1
 encoderDeclaration key decodedValue =
     let
         name =
@@ -1301,15 +1334,15 @@ encoderDeclaration key decodedValue =
         Elm.withDocumentation (String.replace "{name}" key """The generated encoder for the {name} key.""")
             (Elm.declaration name
                 (Elm.withType
-                    (Type.function [ valueType.annotation (JsonToElm.Gen.annotation decodedValue) ]
+                    (Type.function [ valueType.annotation (valueToAnnotation decodedValue) ]
                         Gen.Json.Encode.annotation_.value
                     )
-                    (Elm.fn ( key, Just (valueType.annotation (JsonToElm.Gen.annotation decodedValue)) )
+                    (Elm.fn ( key, Just (valueType.annotation (valueToAnnotation decodedValue)) )
                         (\arg ->
                             Elm.Case.custom arg
                                 (valueType.annotation (Type.var "a"))
                                 [ knowValueTypeVariant.branch
-                                    (JsonToElm.Gen.encoder decodedValue)
+                                    (valueToEncoder decodedValue)
                                 , unknownValueTypeVariant.branch identity
                                 , notFoundValueTypeVariant.branch Gen.Json.Encode.null
                                 ]
@@ -1379,7 +1412,7 @@ decoderDeclarations decoders =
 
 
 {-| -}
-defaultDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn
+defaultDeclaration : String -> Value -> DeclaredFn
 defaultDeclaration key decodedValue =
     let
         name =
@@ -1396,7 +1429,7 @@ This can be helpful as a fallback for when the `Value` for this key cannot be fo
 """
             )
             (Elm.exposeWith { exposeConstructor = False, group = Just "Defaults" }
-                (Elm.declaration name (JsonToElm.Gen.expression decodedValue))
+                (Elm.declaration name (valueToDeclaration decodedValue))
             )
     }
 
@@ -1413,7 +1446,7 @@ defaultDeclarations defaults =
 {-| -}
 storeNameFromFilePath : List String -> String
 storeNameFromFilePath =
-    List.foldr (\part acc -> String.toLower part ++ acc) ""
+    List.foldr (\part acc -> part ++ acc) ""
 
 
 {-| Generates a name for this store based on the passed file name.
@@ -1535,7 +1568,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
 
 
 {-| -}
-setKeyDeclaration : String -> JsonToElm.JsonValue -> DeclaredFn -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
+setKeyDeclaration : String -> Value -> DeclaredFn -> DeclaredFn -> DeclaredFn1 -> StoreType -> DeclaredFn2
 setKeyDeclaration key decodedValue storeName passedKeyDeclaration generatedEncoder storage =
     let
         name =
@@ -1555,13 +1588,13 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
                     (Elm.withType
                         (Type.function
                             [ storage.customType.annotation
-                            , valueType.annotation (JsonToElm.Gen.annotation decodedValue)
+                            , valueType.annotation (valueToAnnotation decodedValue)
                             ]
                             (Type.tuple storage.customType.annotation Gen.Json.Encode.annotation_.value)
                         )
                         (Elm.fn2
                             storage.customType.argument
-                            ( key ++ "Value", Just (JsonToElm.Gen.annotation decodedValue) )
+                            ( key ++ "Value", Just (valueToAnnotation decodedValue) )
                             (\storageArg val ->
                                 storage.destructure DestructureBothStorageVals
                                     storageArg
@@ -1726,7 +1759,7 @@ to your model. The second is a `Json.Encode.Value` which should be sent out via 
 
 
 {-| -}
-getDeclaration : String -> JsonToElm.JsonValue -> StoreType -> DeclaredFn1
+getDeclaration : String -> Value -> StoreType -> DeclaredFn1
 getDeclaration key decodedValue store =
     let
         name =
@@ -1755,7 +1788,7 @@ the `refresh{uppercaseName}` function!
                 (Elm.declaration name
                     (Elm.withType
                         (Type.function [ store.customType.annotation ]
-                            (valueType.annotation (JsonToElm.Gen.annotation decodedValue))
+                            (valueType.annotation (valueToAnnotation decodedValue))
                         )
                         (Elm.fn
                             store.customType.argument
@@ -1983,10 +2016,10 @@ keyDeclarations keys =
                 ( [], Dict.empty, Dict.empty )
                 keys
     in
-    { values = List.map Tuple.first (Dict.toList allKeys)
+    { values = List.map (\key -> Tuple.first key |> String.trim) (Dict.toList allKeys)
     , process =
         \string ->
-            Gen.String.call_.toLower (Gen.String.call_.trim string)
+            Gen.String.call_.trim string
     , fnGroup =
         { call =
             \key ->
@@ -2013,3 +2046,99 @@ capitalizeFirstCharacter string =
 
         Nothing ->
             string
+
+
+{-| Transform a `Json.Encode.Value` to a `KeyValueStoreGen.Internal.Value`.
+
+Handles checking keys passed in the `Json.Encode.Value` to see if they should be treated
+as `Dict` values instead of normal Json values.
+
+-}
+jsonToValue : WithDictSupport -> Json.Encode.Value -> List ( String, Value )
+jsonToValue withDictSupport json =
+    let
+        toJsonToElmValue val =
+            Result.withDefault (JsonToElm.JsonUnknown val)
+                (Json.Decode.decodeValue JsonToElm.decode val)
+
+        decodeValue ( key, val ) =
+            let
+                trimmedKey =
+                    String.trim key
+
+                stringEndsInUnderscoreCharacter =
+                    trimmedKey |> String.endsWith "_"
+            in
+            case ( withDictSupport, stringEndsInUnderscoreCharacter ) of
+                ( WithDictSupport, True ) ->
+                    ( trimmedKey |> String.dropRight 1
+                    , DictValue (JsonValue (toJsonToElmValue val))
+                    )
+
+                ( _, _ ) ->
+                    ( trimmedKey, JsonValue (toJsonToElmValue val) )
+    in
+    json
+        |> Json.Decode.decodeValue (Json.Decode.keyValuePairs Json.Decode.value)
+        |> Result.map (List.map decodeValue)
+        |> Result.withDefault []
+
+
+{-| -}
+valueToAnnotation : Value -> Type.Annotation
+valueToAnnotation passedValue =
+    case passedValue of
+        JsonValue value ->
+            JsonToElm.Gen.annotation value
+
+        DictValue value ->
+            Type.dict Type.string (valueToAnnotation value)
+
+
+{-| -}
+valueToDeclaration : Value -> Elm.Expression
+valueToDeclaration passedValue =
+    case passedValue of
+        JsonValue value ->
+            JsonToElm.Gen.expression value
+
+        DictValue _ ->
+            Gen.Dict.fromList []
+
+
+{-| -}
+valueToDecoderHelper : Dict String Elm.Declaration -> Value -> ( Elm.Expression, Dict String Elm.Declaration )
+valueToDecoderHelper accumulatedDeclarations passedValue =
+    let
+        jsonToElmDecoderConfig =
+            { decoderExpressionType = Nothing }
+    in
+    case passedValue of
+        JsonValue value ->
+            JsonToElm.Gen.decoder jsonToElmDecoderConfig value
+
+        DictValue value ->
+            let
+                ( valueExpression, valueDeclarations ) =
+                    valueToDecoderHelper accumulatedDeclarations value
+            in
+            ( Gen.Json.Decode.dict valueExpression
+            , valueDeclarations
+            )
+
+
+{-| -}
+valueToDecoder : Value -> ( Elm.Expression, Dict String Elm.Declaration )
+valueToDecoder =
+    valueToDecoderHelper Dict.empty
+
+
+{-| -}
+valueToEncoder : Value -> (Elm.Expression -> Elm.Expression)
+valueToEncoder passedValue =
+    case passedValue of
+        JsonValue value ->
+            JsonToElm.Gen.encoder value
+
+        DictValue value ->
+            Gen.Json.Encode.dict Gen.Basics.identity (valueToEncoder value)

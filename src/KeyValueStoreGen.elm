@@ -1,17 +1,20 @@
 module KeyValueStoreGen exposing
-    ( init
+    ( Store
+    , init, withDictSupport
     , generate
     )
 
 {-| Generate an Elm module for saving and loading data to an external key-value data source.
 
 For guidance on how to wire the generated code to work with JavaScript through ports, take a look at the
-examples in the package Github repo.
+[examples in the package Github repo](https://github.com/joeybright/key-value-store-gen/tree/main/examples/).
+
+@docs Store
 
 
 # Configuration
 
-@docs init
+@docs init, withDictSupport
 
 
 # Generating a Store
@@ -24,14 +27,17 @@ import Dict exposing (Dict)
 import Elm
 import Elm.Annotation as Type
 import Json.Decode
-import JsonToElm
-import JsonToElm.Gen
 import KeyValueStoreGen.Internal as Internal
 
 
-type alias Store =
-    { fileName : List String
-    }
+{-| Represents information about and configuration of the store you want to create. This type
+does not have its constructor exposed and must be created using the [`init`](#init) function.
+-}
+type Store
+    = Store
+        { fileName : List String
+        , withDictSupport : Internal.WithDictSupport
+        }
 
 
 {-| Create a new store. You can pass this to the [`generate`](#generate) function to generate
@@ -39,10 +45,36 @@ code with elm-codegen.
 -}
 init : List String -> Store
 init fileName =
-    { fileName = fileName
+    Store
+        { fileName = fileName
+        , withDictSupport = Internal.WithoutDictSupport
+        }
+
+
+{-| Adds support for generating encoding and decoding for `Dict` values. Any key in the
+`Json.Decode.Value` passed to the [`generate`](#generate) function ending in a `_` character
+will have its value recognize as a `Dict`.
+
+For example, when a `Store` that has this option enabled is run on some JSON with the following shape:
+
+    { "people_" :
+        {
+            name : "",
+            age : 0
+        }
     }
 
+The generated code will treat that as a `Dict String { name : String, age: Int }` rather than
+`{ name : String, age: Int }`, which would be the default behavior.
 
+-}
+withDictSupport : Store -> Store
+withDictSupport (Store store) =
+    Store { store | withDictSupport = Internal.WithDictSupport }
+
+
+{-| An record representing all of the generated code.
+-}
 type alias Generated =
     { decoders : Dict String Internal.DeclaredFn
     , defaults : Dict String Internal.DeclaredFn
@@ -69,17 +101,12 @@ working internally, generate some code and read the comments!
 
 -}
 generate : Store -> Json.Decode.Value -> Elm.File
-generate { fileName } json =
+generate (Store passedStore) json =
     let
         generated : Generated
         generated =
             generateFromKeysValuePairs storeName
-                (Result.withDefault []
-                    (Json.Decode.decodeValue
-                        (Json.Decode.keyValuePairs Json.Decode.value)
-                        json
-                    )
-                )
+                (Internal.jsonToValue passedStore.withDictSupport json)
 
         storageTypeAlias : Internal.DeclaredTypeAlias
         storageTypeAlias =
@@ -95,7 +122,7 @@ generate { fileName } json =
 
         decodeFromJs : Internal.DeclaredFn
         decodeFromJs =
-            Internal.decodeFromJsAction fileName keys
+            Internal.decodeFromJsAction passedStore.fileName keys
 
         update : Internal.DeclaredFn2
         update =
@@ -155,7 +182,7 @@ generate { fileName } json =
 
         storeName : Internal.DeclaredFn
         storeName =
-            Internal.storeNameDeclaration fileName
+            Internal.storeNameDeclaration passedStore.fileName
 
         helpers : List Elm.Declaration
         helpers =
@@ -190,7 +217,7 @@ generate { fileName } json =
             , (Internal.encodeStoreDeclaration toDict store).declaration
             ]
     in
-    Elm.fileWith fileName
+    Elm.fileWith passedStore.fileName
         { docs =
             \list ->
                 """This is a generated module created by the key-value-store-gen package and the elm-codegen package.
@@ -217,22 +244,17 @@ check out the examples folder at this packages Github repo: joeybright/key-value
 
 {-| Generates functions that generate code using the decoded JSON.
 -}
-generateFromKeysValuePairs : Internal.DeclaredFn -> List ( String, Json.Decode.Value ) -> Generated
+generateFromKeysValuePairs : Internal.DeclaredFn -> List ( String, Internal.Value ) -> Generated
 generateFromKeysValuePairs storeName =
     List.foldr
-        (\( key, value ) acc ->
+        (\( key, val ) acc ->
             let
-                decodedValue : JsonToElm.JsonValue
-                decodedValue =
-                    Result.withDefault (JsonToElm.JsonUnknown value)
-                        (Json.Decode.decodeValue JsonToElm.decode value)
-
                 ( expression, helperDeclarations ) =
-                    JsonToElm.Gen.decoder { decoderExpressionType = Nothing } decodedValue
+                    Internal.valueToDecoder val
 
                 valueType : Type.Annotation
                 valueType =
-                    Internal.valueType.annotation (JsonToElm.Gen.annotation decodedValue)
+                    Internal.valueType.annotation (Internal.valueToAnnotation val)
 
                 generatedKeyDeclaration : Internal.DeclaredFn
                 generatedKeyDeclaration =
@@ -240,17 +262,17 @@ generateFromKeysValuePairs storeName =
 
                 generatedEncoder : Internal.DeclaredFn1
                 generatedEncoder =
-                    Internal.encoderDeclaration key decodedValue
+                    Internal.encoderDeclaration key val
             in
             { decoders = Dict.insert key (Internal.decoderDeclaration key valueType expression) acc.decoders
-            , defaults = Dict.insert key (Internal.defaultDeclaration key decodedValue) acc.defaults
+            , defaults = Dict.insert key (Internal.defaultDeclaration key val) acc.defaults
             , encoders = Dict.insert key generatedEncoder acc.encoders
-            , getters = Dict.insert key (Internal.getDeclaration key decodedValue) acc.getters
+            , getters = Dict.insert key (Internal.getDeclaration key val) acc.getters
             , helpers = Dict.union helperDeclarations acc.helpers
             , keys = Dict.insert key generatedKeyDeclaration acc.keys
             , refreshers = Dict.insert key (Internal.refreshDeclaration key storeName generatedKeyDeclaration) acc.refreshers
             , removers = Dict.insert key (Internal.removeDeclaration key storeName generatedKeyDeclaration) acc.removers
-            , setters = Dict.insert key (Internal.setKeyDeclaration key decodedValue storeName generatedKeyDeclaration generatedEncoder) acc.setters
+            , setters = Dict.insert key (Internal.setKeyDeclaration key val storeName generatedKeyDeclaration generatedEncoder) acc.setters
             , types = Dict.insert key valueType acc.types
             }
         )
