@@ -6,7 +6,8 @@
     "dev": "npx vite",
     "build": "npx vite build",
     "preview": "npx vite preview",
-    "codegen": "npx elm-codegen run codegen/LocalStorageExample.elm"
+    "codegen": "npx elm-codegen run codegen/LocalStorageExample.elm",
+    "codegen:debug": "npx elm-codegen run codegen/LocalStorageExample.elm --debug"
   },
   "author": "",
   "license": "ISC",
