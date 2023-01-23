@@ -31,7 +31,7 @@ storeNameTests =
                 Expect.equal True
                     (String.contains """storeName : String
 storeName =
-    "localstorage"
+    "LocalStorage"
 """
                         contents
                     )
@@ -41,7 +41,7 @@ storeName =
                 Expect.equal
                     { body = """storeName : String
 storeName =
-    "testfile"
+    "TestFile"
 
 
 """
