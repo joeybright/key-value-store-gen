@@ -105,8 +105,16 @@ generate (Store passedStore) json =
     let
         generated : Generated
         generated =
-            generateFromKeysValuePairs storeName
-                (Internal.jsonToValue passedStore.withDictSupport json)
+            case Internal.jsonToValue passedStore.withDictSupport json of
+                {- The `Internal.jsonToValue` should always result in a `Internal.RecordValue` result given
+                   that anything else is not valid `Json`. If not, we will still generate code, but without
+                   any known keys or values.
+                -}
+                Internal.RecordValue dict _ ->
+                    generateFromKeysValuePairs storeName (Dict.toList dict)
+
+                _ ->
+                    generateFromKeysValuePairs storeName []
 
         storageTypeAlias : Internal.DeclaredTypeAlias
         storageTypeAlias =

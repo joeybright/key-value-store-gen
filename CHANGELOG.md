@@ -1,3 +1,7 @@
+# 2.1.1
+
+- Fixed issue where nested keys ending with an `_` did not generated encoders / decoders assuming they are a `Dict`. Now, whenever `withDictSupport` is run on the `Store` passed into the `KeyValueStoreGen.generate` function, _any_ key anywhere in your `Json.Encode.Value` will be treated as if it was a `Dict` regardless of its position within the passsed JSON.
+
 # 2.1.0
 
 - Added support for encoding / decoding `Dict` values. Any key in the `Json.Encode.Value` passed to the `KeyValueStoreGen.generate` function ending in an `_` character will be considered a `Dict` type. For example, passing `{ "count_" : 0 }` will result in generated code that considers `count` to be `Dict String Int` instead of just an `Int`.

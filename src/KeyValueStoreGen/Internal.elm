@@ -121,6 +121,7 @@ import Gen.String
 import Gen.Tuple
 import Json.Decode
 import Json.Encode
+import JsonDecodeMapGen
 import JsonToElm
 import JsonToElm.Gen
 
@@ -140,6 +141,16 @@ portTag =
 -- Types
 
 
+{-| -}
+type alias ValueInfo =
+    { encoder : Elm.Expression -> Elm.Expression
+    , decoder : Elm.Expression
+    , expression : Elm.Expression
+    , annotation : Type.Annotation
+    , helpers : Dict String Elm.Declaration
+    }
+
+
 {-| An internal type to help differentiate between a value that is a `JsonValue` or another
 value type that this module support generating code for.
 
@@ -147,8 +158,15 @@ Currently support `Dict` values, but may support other values like custom types 
 
 -}
 type Value
-    = JsonValue JsonToElm.JsonValue
-    | DictValue Value
+    = IntValue Int ValueInfo
+    | FloatValue Float ValueInfo
+    | StringValue String ValueInfo
+    | BoolValue Bool ValueInfo
+    | ListValue (List Value) ValueInfo
+    | RecordValue (Dict String Value) ValueInfo
+    | DictValue Value ValueInfo
+    | NeverValue ValueInfo
+    | JsonValue Json.Encode.Value ValueInfo
 
 
 {-| A custom type representing the type of `Dict` support a `Store` has. Currently only two
@@ -1429,7 +1447,7 @@ This can be helpful as a fallback for when the `Value` for this key cannot be fo
 """
             )
             (Elm.exposeWith { exposeConstructor = False, group = Just "Defaults" }
-                (Elm.declaration name (valueToDeclaration decodedValue))
+                (Elm.declaration name (valueToExpression decodedValue))
             )
     }
 
@@ -2054,91 +2072,194 @@ Handles checking keys passed in the `Json.Encode.Value` to see if they should be
 as `Dict` values instead of normal Json values.
 
 -}
-jsonToValue : WithDictSupport -> Json.Encode.Value -> List ( String, Value )
+jsonToValue : WithDictSupport -> Json.Encode.Value -> Value
 jsonToValue withDictSupport json =
     let
-        toJsonToElmValue val =
-            Result.withDefault (JsonToElm.JsonUnknown val)
-                (Json.Decode.decodeValue JsonToElm.decode val)
+        jsonToElmDecoderConfig =
+            { decoderExpressionType = Nothing }
 
-        decodeValue ( key, val ) =
+        {- For the passed `JsonToElm.JsonValue`, generates encoders, decoders, etc. -}
+        valueInfo : JsonToElm.JsonValue -> ValueInfo
+        valueInfo passedVal =
             let
-                trimmedKey =
-                    String.trim key
-
-                stringEndsInUnderscoreCharacter =
-                    trimmedKey |> String.endsWith "_"
+                ( decoder, decoderHelpers ) =
+                    JsonToElm.Gen.decoder jsonToElmDecoderConfig passedVal
             in
-            case ( withDictSupport, stringEndsInUnderscoreCharacter ) of
-                ( WithDictSupport, True ) ->
-                    ( trimmedKey |> String.dropRight 1
-                    , DictValue (JsonValue (toJsonToElmValue val))
-                    )
+            { encoder = JsonToElm.Gen.encoder passedVal
+            , decoder = decoder
+            , expression = JsonToElm.Gen.expression passedVal
+            , annotation = JsonToElm.Gen.annotation passedVal
+            , helpers = decoderHelpers
+            }
 
-                ( _, _ ) ->
-                    ( trimmedKey, JsonValue (toJsonToElmValue val) )
+        toValue passedVal =
+            case passedVal of
+                JsonToElm.JsonBool bool ->
+                    BoolValue bool (valueInfo passedVal)
+
+                JsonToElm.JsonFloat float ->
+                    FloatValue float (valueInfo passedVal)
+
+                JsonToElm.JsonInt int ->
+                    IntValue int (valueInfo passedVal)
+
+                JsonToElm.JsonList list ->
+                    ListValue (List.map toValue list) (valueInfo passedVal)
+
+                JsonToElm.JsonNull ->
+                    NeverValue (valueInfo passedVal)
+
+                JsonToElm.JsonString string ->
+                    StringValue string (valueInfo passedVal)
+
+                JsonToElm.JsonUnknown unknown ->
+                    JsonValue unknown (valueInfo passedVal)
+
+                JsonToElm.JsonObject jsonObject ->
+                    Dict.toList jsonObject
+                        |> List.foldl
+                            (\( key, val ) acc ->
+                                let
+                                    trimmedKey =
+                                        key |> String.trim
+
+                                    keyEndsInUnderscore =
+                                        trimmedKey |> String.endsWith "_"
+
+                                    keyValue =
+                                        toValue val
+                                in
+                                case ( withDictSupport, keyEndsInUnderscore ) of
+                                    ( WithDictSupport, True ) ->
+                                        let
+                                            ( decoder, helpers ) =
+                                                valueToDecoder keyValue
+                                        in
+                                        Dict.insert (trimmedKey |> String.dropRight 1)
+                                            (DictValue (toValue val)
+                                                { encoder = Gen.Json.Encode.dict Gen.Basics.identity (valueToEncoder keyValue)
+                                                , decoder = Gen.Json.Decode.dict decoder
+                                                , expression = Gen.Dict.fromList []
+                                                , annotation = Type.dict Type.string (valueToAnnotation keyValue)
+                                                , helpers = helpers
+                                                }
+                                            )
+                                            acc
+
+                                    _ ->
+                                        Dict.insert key keyValue acc
+                            )
+                            Dict.empty
+                        |> (\res ->
+                                let
+                                    ( generatedDecoder, generatedHelpers ) =
+                                        Dict.toList res
+                                            |> List.map
+                                                (\( key, val ) ->
+                                                    let
+                                                        ( decoder, helpers ) =
+                                                            valueToDecoder val
+                                                    in
+                                                    ( Gen.Json.Decode.field key decoder, helpers )
+                                                )
+                                            |> List.foldl
+                                                (\( decoder, helper ) ( decoderAcc, helperAcc ) ->
+                                                    ( decoderAcc ++ [ decoder ], Dict.union helper helperAcc )
+                                                )
+                                                ( [], Dict.empty )
+                                            |> Tuple.mapFirst JsonDecodeMapGen.generate
+                                in
+                                RecordValue res
+                                    { encoder =
+                                        \valueToEncode ->
+                                            Gen.Json.Encode.object
+                                                (List.map
+                                                    (\( key, val ) ->
+                                                        Elm.tuple (Elm.string key)
+                                                            (Elm.get key (valueToEncoder val valueToEncode))
+                                                    )
+                                                    (Dict.toList res)
+                                                )
+                                    , decoder =
+                                        generatedDecoder.call
+                                            (Elm.function (List.map (\( key, _ ) -> ( key, Nothing )) (Dict.toList res))
+                                                (\list ->
+                                                    Elm.record (List.map2 (\exp key -> ( key, exp )) list (Dict.keys res))
+                                                )
+                                            )
+                                    , expression =
+                                        Elm.record
+                                            (List.map
+                                                (\( key, val ) -> ( key, valueToExpression val ))
+                                                (Dict.toList res)
+                                            )
+                                    , annotation =
+                                        Type.record
+                                            (List.map
+                                                (\( key, val ) -> ( key, valueToAnnotation val ))
+                                                (Dict.toList res)
+                                            )
+                                    , helpers = Dict.union generatedDecoder.declaration generatedHelpers
+                                    }
+                           )
     in
     json
-        |> Json.Decode.decodeValue (Json.Decode.keyValuePairs Json.Decode.value)
-        |> Result.map (List.map decodeValue)
-        |> Result.withDefault []
+        |> Json.Decode.decodeValue JsonToElm.decode
+        |> Result.map toValue
+        |> Result.withDefault (JsonValue json (valueInfo (JsonToElm.JsonUnknown json)))
+
+
+{-| -}
+getValueInfo : Value -> ValueInfo
+getValueInfo passedValue =
+    case passedValue of
+        BoolValue _ info ->
+            info
+
+        FloatValue _ info ->
+            info
+
+        DictValue _ info ->
+            info
+
+        IntValue _ info ->
+            info
+
+        ListValue _ info ->
+            info
+
+        NeverValue info ->
+            info
+
+        StringValue _ info ->
+            info
+
+        JsonValue _ info ->
+            info
+
+        RecordValue _ info ->
+            info
 
 
 {-| -}
 valueToAnnotation : Value -> Type.Annotation
 valueToAnnotation passedValue =
-    case passedValue of
-        JsonValue value ->
-            JsonToElm.Gen.annotation value
-
-        DictValue value ->
-            Type.dict Type.string (valueToAnnotation value)
+    getValueInfo passedValue |> .annotation
 
 
 {-| -}
-valueToDeclaration : Value -> Elm.Expression
-valueToDeclaration passedValue =
-    case passedValue of
-        JsonValue value ->
-            JsonToElm.Gen.expression value
-
-        DictValue _ ->
-            Gen.Dict.fromList []
-
-
-{-| -}
-valueToDecoderHelper : Dict String Elm.Declaration -> Value -> ( Elm.Expression, Dict String Elm.Declaration )
-valueToDecoderHelper accumulatedDeclarations passedValue =
-    let
-        jsonToElmDecoderConfig =
-            { decoderExpressionType = Nothing }
-    in
-    case passedValue of
-        JsonValue value ->
-            JsonToElm.Gen.decoder jsonToElmDecoderConfig value
-
-        DictValue value ->
-            let
-                ( valueExpression, valueDeclarations ) =
-                    valueToDecoderHelper accumulatedDeclarations value
-            in
-            ( Gen.Json.Decode.dict valueExpression
-            , valueDeclarations
-            )
+valueToExpression : Value -> Elm.Expression
+valueToExpression passedValue =
+    getValueInfo passedValue |> .expression
 
 
 {-| -}
 valueToDecoder : Value -> ( Elm.Expression, Dict String Elm.Declaration )
-valueToDecoder =
-    valueToDecoderHelper Dict.empty
+valueToDecoder passedValue =
+    getValueInfo passedValue |> (\res -> ( res.decoder, res.helpers ))
 
 
 {-| -}
 valueToEncoder : Value -> (Elm.Expression -> Elm.Expression)
 valueToEncoder passedValue =
-    case passedValue of
-        JsonValue value ->
-            JsonToElm.Gen.encoder value
-
-        DictValue value ->
-            Gen.Json.Encode.dict Gen.Basics.identity (valueToEncoder value)
+    getValueInfo passedValue |> .encoder
