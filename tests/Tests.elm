@@ -16,11 +16,11 @@ storeNameTests =
     let
         { contents } =
             KeyValueStoreGen.generate
-                (KeyValueStoreGen.init [ "LocalStorage" ])
                 (Json.Encode.object
                     [ ( "count", Json.Encode.int 0 )
                     ]
                 )
+                (KeyValueStoreGen.init [ "LocalStorage" ])
 
         { call, declaration } =
             KeyValueStoreGen.Internal.storeNameDeclaration [ "Test", "File" ]

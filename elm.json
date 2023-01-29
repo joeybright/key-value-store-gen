@@ -3,7 +3,7 @@
     "name": "joeybright/key-value-store-gen",
     "summary": "Generate a key-value store from JSON",
     "license": "BSD-3-Clause",
-    "version": "2.1.1",
+    "version": "3.0.0",
     "exposed-modules": [
         "KeyValueStoreGen"
     ],

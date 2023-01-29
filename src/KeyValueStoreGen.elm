@@ -100,8 +100,8 @@ The generated code has its behavior documented. If you'd like to understand how 
 working internally, generate some code and read the comments!
 
 -}
-generate : Store -> Json.Decode.Value -> Elm.File
-generate (Store passedStore) json =
+generate : Json.Decode.Value -> Store -> Elm.File
+generate json (Store passedStore) =
     let
         generated : Generated
         generated =

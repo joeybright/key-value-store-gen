@@ -1,3 +1,7 @@
+# 3.0.0
+
+- Changed the order or arguments for the `KeyValueStoreGen.generate` function. The function now takes the `Store` as the last argument rather than the first. This is to help with piping a `Store` into the function.
+
 # 2.1.1
 
 - Fixed issue where nested keys ending with an `_` did not generated encoders / decoders assuming they are a `Dict`. Now, whenever `withDictSupport` is run on the `Store` passed into the `KeyValueStoreGen.generate` function, _any_ key anywhere in your `Json.Encode.Value` will be treated as if it was a `Dict` regardless of its position within the passsed JSON.
